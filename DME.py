@@ -1,13 +1,29 @@
-#discord message encryption software
-import base64, os, json, tkinter as tk
+# discord message encryption software (robust build-safe version)
+import sys, os, json, base64, re, tkinter as tk
 from tkinter import ttk, messagebox
 import pyperclip
+
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag  # clearer decrypt errors
 
-VERSION = "enc:v1:"      # prefix so future formats can coexist
-KEYBOOK = "keybook.json" # per-contact passphrases (stored locally, plaintext)
+VERSION = "enc:v1:"
 
+# -------- stable per-user keybook path (not CWD-dependent) --------
+def _keybook_path():
+    if sys.platform.startswith("win"):
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        root = os.path.join(base, "DMEncrypter")
+    elif sys.platform == "darwin":
+        root = os.path.expanduser("~/Library/Application Support/DMEncrypter")
+    else:
+        root = os.path.expanduser("~/.config/DMEncrypter")
+    os.makedirs(root, exist_ok=True)
+    return os.path.join(root, "keybook.json")
+
+KEYBOOK = _keybook_path()
+
+# -------- crypto helpers --------
 def b64(x: bytes) -> str:
     return base64.urlsafe_b64encode(x).decode().rstrip("=")
 
@@ -37,10 +53,24 @@ def decrypt_msg(token: str, passphrase: str) -> str:
     pt = AESGCM(key).decrypt(nonce, ct, None)
     return pt.decode("utf-8")
 
+# -------- token extraction (tolerant of extra text/backticks) --------
+TOKEN_RE = re.compile(r'(enc:v1:[A-Za-z0-9_-]+)')
+
+def extract_token(text: str) -> str:
+    text = text.strip()
+    if text.startswith(VERSION):
+        return text
+    m = TOKEN_RE.search(text)
+    if not m:
+        raise ValueError("No enc:v1 token found in the text.")
+    return m.group(1)
+
+# -------- keybook I/O --------
 def load_keybook():
     try:
         with open(KEYBOOK, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except FileNotFoundError:
         return {}
     except Exception:
@@ -50,6 +80,7 @@ def save_keybook(kb):
     with open(KEYBOOK, "w", encoding="utf-8") as f:
         json.dump(kb, f, indent=2)
 
+# -------- UI --------
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -95,7 +126,7 @@ class App(tk.Tk):
         ttk.Button(btns, text="Paste to Plaintext", command=self.paste_plain).pack(side="right", padx=6)
 
         # Status
-        self.status = tk.StringVar(value="Ready.")
+        self.status = tk.StringVar(value=f"Ready. (Keybook: {KEYBOOK})")
         ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w").pack(fill="x", padx=10, pady=(0,10))
 
         # Autofill passphrase from keybook on alias select
@@ -127,6 +158,9 @@ class App(tk.Tk):
     def do_encrypt(self):
         try:
             pt = self.plain.get("1.0", "end-1c")
+            if not pt:
+                messagebox.showwarning("Nothing to encrypt", "Plaintext box is empty.")
+                return
             token = encrypt_msg(pt, self.get_pass())
             self.cipher.delete("1.0", tk.END)
             self.cipher.insert("1.0", token)
@@ -136,11 +170,17 @@ class App(tk.Tk):
 
     def do_decrypt(self):
         try:
-            token = self.cipher.get("1.0", "end-1c").strip()
+            raw = self.cipher.get("1.0", "end-1c")
+            token = extract_token(raw)  # tolerant of extra text/backticks
             pt = decrypt_msg(token, self.get_pass())
             self.plain.delete("1.0", tk.END)
             self.plain.insert("1.0", pt)
             self.status.set("Decrypted.")
+        except InvalidTag:
+            messagebox.showerror(
+                "Decrypt error",
+                "Authentication failed.\n\nLikely causes:\n• Wrong passphrase\n• Ciphertext altered or incomplete"
+            )
         except Exception as e:
             messagebox.showerror("Decrypt error", str(e))
 
@@ -156,5 +196,3 @@ class App(tk.Tk):
 
 if __name__ == "__main__":
     App().mainloop()
-
-

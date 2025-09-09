@@ -2,6 +2,9 @@
 
 A super easy tool to encrypt and decrypt messages before sharing them on Discord (or any chat app).  
 No programming knowledge needed. Just copy, paste, click one button.  
+disclaimer - made for friends and very casually its probably a terrible app and flags like all antivirus since its an exe file with no safety
+if you download a file under this name that isnt from this link its probably got a virus on it so dont, matter of fact dont even download this one
+I couldve accidentally made a cryptominer or some shit.
 
 ---
 

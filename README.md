@@ -66,6 +66,7 @@ cryptography/... ← crypto library files
 pyperclip/... ← clipboard helper
 keybook.json ← created after first run (stores your passphrases)
 
-
+## Download (Windows)
+[Get the latest DM Encrypter](https://github.com/RogueKnyt/RKsMessageDecoder/releases/download/v1.0.0/DM.Encrypter.zip)
 
 
